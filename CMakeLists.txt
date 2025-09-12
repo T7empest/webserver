@@ -3,4 +3,5 @@ project(webserver)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(webserver src/main.cpp)
+file(GLOB_RECURSE SRC_FILES src/*.cc)
+add_executable(webserver ${SRC_FILES})
