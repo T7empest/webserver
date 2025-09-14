@@ -8,9 +8,6 @@
 
 namespace Http
 {
-	const std::string OK        = "HTTP/1.1 200 OK\r\n\r\n";
-	const std::string NOT_FOUND = "HTTP/1.1 404 Not Found\r\n\r\n";
-
 	struct Request
 	{
 		std::string method;

@@ -1,7 +1,7 @@
 #include <iostream>
 
-#include "http_request.h"
-#include "tcp_server.h"
+#include "http/http_request.h"
+#include "core/tcp_server.h"
 
 int main()
 {

@@ -6,14 +6,14 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
-
 class TcpServer
 {
 public:
 	TcpServer() = default;
 	~TcpServer();
 
-	bool run();
+	int         run();
+	static void handle_client(int client_fd);
 
 private:
 	bool setup_listen_socket();
@@ -25,5 +25,4 @@ private:
 	int         server_fd_ = 0;
 
 	sockaddr* current_client_;
-	int       client_fd_ = 0;
 };
