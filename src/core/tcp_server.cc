@@ -23,19 +23,21 @@ int TcpServer::run()
 
 	while (true)
 	{
-
 		sockaddr_in cli{};
 		socklen_t   clen = sizeof(sockaddr_in);
 
-		int client_fd = accept(server_fd_, (sockaddr*)&cli, &clen);
+		int client_fd = accept(server_fd_, reinterpret_cast<sockaddr*>(&cli), &clen);
 
 		if (client_fd < 0)
 		{
 			std::cerr << "accept failed\n";
 			return -1;
 		}
-		std::thread(handle_client, client_fd).detach();
+		thread_pool_.enqueue([this, client_fd]{
+			handle_client(client_fd);
+		});
 	}
+	return 0;
 }
 
 void TcpServer::handle_client(int client_fd)
@@ -115,7 +117,7 @@ bool TcpServer::setup_listen_socket()
 		return false;
 	}
 
-	if (listen(server_fd_, 5) != 0)
+	if (listen(server_fd_, SOMAXCONN) != 0)
 	{
 		std::cerr << "listen failed\n";
 		return false;
