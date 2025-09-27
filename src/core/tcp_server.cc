@@ -8,6 +8,7 @@
 #include <thread>
 #include <unistd.h>
 
+#include "constants.h"
 #include "../http/http_request.h"
 #include "../http/http_response.h"
 
@@ -33,7 +34,8 @@ int TcpServer::run()
 			std::cerr << "accept failed\n";
 			return -1;
 		}
-		thread_pool_.enqueue([this, client_fd]{
+		thread_pool_.enqueue([this, client_fd]
+		{
 			handle_client(client_fd);
 		});
 	}
@@ -44,28 +46,38 @@ void TcpServer::handle_client(int client_fd)
 {
 	std::string request;
 	request.reserve(16384);
-	char buf[4096];
 
-	ssize_t n = recv(client_fd, buf, sizeof(buf), 0);
-	if (n <= 0)
+
+	bool closed = false;
+	while (!closed)
 	{
-		close(client_fd);
-		return;
-	}
-	request.append(buf, n);
+		size_t n = recv_until_end(client_fd, request);
+		if (n <= 0) break;
+		Http::Request req = Http::parse_request(request);
 
-	Http::Request            req = Http::parse_request(request);
+		bool should_close = (req.version == "HTTP/1.0") ||
+			(Http::get_connection_status(req) == "close");
+
+		dev_send_response(client_fd, should_close, req);
+
+		closed = should_close;
+	}
+	close(client_fd);
+}
+
+void TcpServer::dev_send_response(int client_fd, bool closed, Http::Request req)
+{
 	std::string              body{};
 	std::vector<std::string> headers{};
 	Http::Response           res{};
 	std::string              res_str{};
+
+	// TODO: change the endpoint configuration
 	if (req.url == "/health")
 	{
-		body    = "123 test 123";
-		headers = {
-			std::format("Content-Length: {}", body.size()),
-			std::string("Connection: close")
-		};
+		body    = Http::test_body;
+		headers = {Http::test_content_length};
+		if (closed) headers.emplace_back("Connection: close");
 		res = {
 			.status = Http::Status::OK,
 			.headers = headers,
@@ -76,21 +88,17 @@ void TcpServer::handle_client(int client_fd)
 	}
 	else
 	{
-		body    = "";
-		headers = {
-			std::format("Content-Length: {}", body.size()),
-			std::string("Connection: close")
-		};
-		res = {
-			.status = Http::Status::NOT_FOUND,
-			.headers = headers,
-			.body = body
-		};
-		res_str = res.to_string();
-		send(client_fd, res_str.c_str(), res_str.size() * sizeof(char), 0);
+		if (closed)
+		{
+			send(client_fd, Http::NOT_FOUND_RESPONSE_CLOSE.c_str(),
+				 Http::NOT_FOUND_RESPONSE_CLOSE.size(), 0);
+		}
+		else
+		{
+			send(client_fd, Http::NOT_FOUND_RESPONSE_KEEPALIVE.c_str(),
+				 Http::NOT_FOUND_RESPONSE_KEEPALIVE.size(), 0);
+		}
 	}
-
-	close(client_fd);
 }
 
 bool TcpServer::setup_listen_socket()
@@ -111,6 +119,7 @@ bool TcpServer::setup_listen_socket()
 	addr.sin_addr.s_addr = htonl(address_);
 	addr.sin_port        = htons(port_);
 
+
 	if (bind(server_fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0)
 	{
 		std::cerr << "bind failed\n";
@@ -124,4 +133,33 @@ bool TcpServer::setup_listen_socket()
 	}
 
 	return true;
+}
+
+// reads headers only for now
+size_t TcpServer::recv_until_end(int client_fd, std::string& buf)
+{
+	buf.clear();
+	buf.reserve(Http::MAX_HEADERS_BYTES);
+	// reading in 4KB chunks
+	char tmp[4096];
+
+	while (buf.size() < Http::MAX_HEADERS_BYTES)
+	{
+		size_t  to_read = std::min(sizeof(tmp), Http::MAX_HEADERS_BYTES - buf.size());
+		ssize_t n       = recv(client_fd, tmp, to_read, 0);
+		if (n <= 0) break; // 0 = client closed, <0 = error
+
+		size_t old_size = buf.size();
+		buf.append(tmp, static_cast<size_t>(n));
+
+		// Look for CRLFCRLF marker across chunk boundaries
+		size_t scan_from = (old_size >= 3) ? old_size - 3 : 0;
+		size_t pos       = buf.find(Http::CRLFCRLF, scan_from);
+		if (pos != std::string::npos)
+		{
+			buf.resize(pos + 4); // keep headers only
+			break;
+		}
+	}
+	return buf.size();
 }

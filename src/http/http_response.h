@@ -13,14 +13,10 @@
 #include <vector>
 #include <sstream>
 
+#include "constants.h"
+
 namespace Http
 {
-	enum class Status
-	{
-		OK,
-		NOT_FOUND
-	};
-
 	inline std::string status_to_string(Status status)
 	{
 		switch (status)
@@ -36,21 +32,31 @@ namespace Http
 
 	struct Response
 	{
-		Status status;
+		Status                   status;
 		std::vector<std::string> headers;
-		std::string body;
+		std::string              body;
 
-		std::string to_string() const
+		[[nodiscard]] std::string to_string() const
 		{
 			std::ostringstream response_stream;
-			response_stream << status_to_string(status) << "\r\n";
+			response_stream << status_to_string(status) << CRLF;
 			for (const auto& header : headers)
 			{
-				response_stream << header << "\r\n";
+				response_stream << header << CRLF;
 			}
-			response_stream << "\r\n";
+			response_stream << CRLF;
 			response_stream << body;
 			return response_stream.str();
 		}
 	};
+
+	inline const std::string NOT_FOUND_RESPONSE_CLOSE =
+		"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+
+	inline const std::string NOT_FOUND_RESPONSE_KEEPALIVE =
+		"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n";
+
+	// for test response
+	inline constexpr std::string test_body           = "test";
+	inline constexpr std::string test_content_length = "Content-Length: 4";
 }

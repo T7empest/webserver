@@ -40,7 +40,7 @@ void ThreadPool::worker_loop(std::stop_token st)
 		std::function<void()> job;
 
 		{
-			std::unique_lock<std::mutex> lock(mutex_);
+			std::unique_lock lock(mutex_);
 			// sleep until notify or predicate true
 			cv_.wait(lock, st, [this]
 			{
